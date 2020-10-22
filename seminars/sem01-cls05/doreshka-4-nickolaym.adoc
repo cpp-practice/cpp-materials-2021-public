@@ -1,0 +1,390 @@
+= Разбор дорешки 4
+:icons: font
+:table-caption!:
+:example-caption!:
+:source-highlighter: highlightjs
+:revealjs_hash: true
+:customcss: https://rawcdn.githack.com/fedochet/asciidoc-revealjs-online-converter/7012d6dd12132363bbec8ba4800272ceb6d0a3e6/asciidoc_revealjs_custom_style.css
+:revealjs_theme: white
+:stylesheet: main.css
+
+
+== Compose и Composer
+
+* память под массив указателей на функций
+* порядок вызова функций, вырожденные случаи
+* семантика значения
+
+=== Память под массив функций
+
+Variable Length Array - это нестандартное расширение, позаимствовано из Си (C99)
+[source,cpp]
+----
+double Compose(size_t n, ...) {
+    FuncT funcs[n];
+    .....
+}
+----
+даже если мы себе это позволим, то
+[source,cpp]
+----
+Composer::Composer(size_t n, ...) {
+    FuncT funcs[n];
+    .....
+    this->funcs_ = funcs;
+    // указатель на массив ГДЕ? который живёт СКОЛЬКО?
+}
+----
+
+=== Семантика значения
+
+Composer можно копировать и передавать по значению
+
+[source,cpp]
+----
+Composer make() { return Composer(2, sqrt, sqrt); }
+
+double run(Composer c, double v) { return c(v); }
+
+int main() {
+    Composer c1 = make();
+    Composer c2 = c1;
+    c1 = c2;
+    
+    double x = run(c1, 123);
+    double y = c1(123);
+    double z = c2(123);
+    assert(x == y && y == z);
+}
+----
+
+ifdef::backend-revealjs[=== !]
+
+Минималистичная реализация
+[source,cpp]
+----
+class Composer {
+    FuncT* funcs_;
+    size_t n_;
+public:
+    Composer(size_t n, ...) {
+        funcs_ = new FuncT[n];
+        .....
+    }
+    ~Composer() {
+        delete[] funcs_;
+    }
+    double operator()(double v) const { ..... }
+};
+----
+
+Что произойдёт при копировании/присваивании?
+
+ifdef::backend-revealjs[=== !]
+
+* компилятор создаёт конструктор копирования и оператор присваивания по умолчанию - копирование полей как есть
+* будет скопирован указатель, но не массив
+* деструктор грохнет общий для всех копий массив!
+
+ifdef::backend-revealjs[=== !]
+
+Что делать?
+
+* написать конструктор копирования и присваивание правильно
+* вместо голого указателя на массив использовать умный - который умеет копировать или разделять общие данные
+* ЗАПРЕТИТЬ семантику значения. Передавать объекты Composer по указателю/ссылке.
+
+== Makefile
+
+* Смешивание исходников на двух языках
+ ** Заголовочный файл на общем подмножестве Си и С++
+ ** Линковка
+* Сборка с зависимостями
+
+=== Общий заголовочный файл
+
+* компилятор Си декорирует имя функции как `_sum`
+* C++ - как `__Z3sumii` - если ему не сказать, что это Си-совместимое имя (`extern "C"`)
+
+Способы сказать:
+
+* sum.h - чисто сишный заголовочный файл, обрамить его включение
+* sum.h - сишно-плюсовый файл, специальным образом написанный
+
+ifdef::backend-revealjs[=== !]
+
+Адаптация к сишному заголовочнику
+[source,cpp]
+extern "C" {
+#include "sum.h"
+}
+
+Допиливание самого файла
+[source,cpp]
+----
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+int sum(int, int);
+
+#ifdef __cplusplus
+}
+#endif
+----
+
+[source,cpp]
+----
+#ifdef __cplusplus
+#define EXTERNC extern "C"
+#else
+#define EXTERNC
+#endif
+
+EXTERNC int sum(int, int);
+----
+
+=== Зависимости
+
+Смысл указания зависимостей - это инкрементная сборка:
+
+Цель надо построить, если
+
+* этот файл отсутствует
+* он более старый, чем файлы, от которых он зависит
+* (ну и далее рекурсивно)
+
+ifdef::backend-revealjs[=== !]
+
+[source,make]
+----
+all:
+    gcc sum.c test.cpp -o task2
+----
+
+[source,make]
+----
+all: test
+
+test:
+    gcc sum.c test.cpp -o task2
+----
+
+[source,make]
+----
+all: task2
+
+task2:
+    gcc sum.c test.cpp -o task2
+----
+
+[source,make]
+----
+all: task2
+
+task2: sum.c test.cpp
+    gcc sum.c test.cpp -o task2
+----
+
+[source,make]
+----
+all: task2
+
+task2: sum.c test.cpp sum.h
+    gcc sum.c test.cpp -o task2
+----
+
+ifdef::backend-revealjs[=== !]
+
+Тут я сделал две ошибки. Найдём их?
+[source,make]
+----
+all: task2
+
+task2: sum.o test.o
+    g++ $^ -o $@
+    # или, что то же самое,
+    g++ sum.o test.o -o task2
+
+sum.o: sum.c sum.h
+    g++ $< -o $@
+    # или, что то же самое,
+    g++ sum.c -o sum.o
+
+test.o: test.cpp
+    g++ $< -o $@
+----
+
+[%step]
+* sum.c - скомпилировал как С++
+* test.o - не указал зависимость от sum.h
+
+== Enum
+
+* обычный `enum` и `enum class`
+* определения внутри и вне `namespace wdu`
+* ошибки
+
+=== enum / enum class
+
+[source,cpp]
+----
+enum X { X1, X2, X3 };
+
+X x = X1;
+
+int i = x;
+X y = static_cast<X>(i);
+----
+
+[source,cpp]
+----
+enum class X { X1, X2, X3 };
+
+X x = X::X1;
+
+int i = static_cast<int>(x);
+X y = static_cast<X>(i);
+----
+
+=== определения внутри и вне namespace
+
+[source,cpp]
+----
+namespace wdu {
+
+enum WeekDay { MONDAY, ..... };
+
+WeekDay first();
+WeekDay next(WeekDay w);
+
+}  // namespace wdu
+----
+
+[source,cpp]
+----
+wdu::WeekDay wdu::first() { ..... }
+wdu::WeekDay wdu::next(WeekDay w) { ..... }
+----
+
+[source,cpp]
+----
+namespace wdu {
+
+WeekDay first() { ..... }
+WeekDay next(WeekDay w) { ..... }
+
+}  // namespace wdu
+----
+
+=== Ошибки
+
+* MONDAY..SUNDAY = 0..6, а не 1..7
+
+[source,cpp]
+enum WeekDay { MONDAY, TUESDAY, ....., SUNDAY };
+
+[source,cpp]
+enum WeekDay { SUNDAY, MONDAY, TUESDAY, ....., SATURDAY };
+
+ifdef::backend-revealjs[=== !]
+
+* не исчерпывающий switch / if
+
+[source,cpp]
+const char* GetDayOfWeekName(WeekDay w) {
+    switch(w) {
+        case WeekDay::MONDAY: return "monday";
+        .....
+        case WeekDay::SUNDAY: return "sunday";
+    }
+    // сюда мы не должны попасть
+}
+
+[%step]
+* а если вместо WeekDay тип w будет int?
+* будет warning `control may reach end of non-void function [-Wreturn-type]`
+* treat warnings as errors `-Werror`
+
+ifdef::backend-revealjs[=== !]
+
+Вычисления
+
+[%step]
+* арифметика по модулю 7 на [1..7]
+  ** это просто [0..6] + 1, а не [0..7] по модулю 8
+* учёт високосных (или невисокосных) лет
+  ** сколько максимум дней в феврале?
+* таблица (бегущих сумм) дней в (прошедших) месяцах года
+  ** с января по декабрь, для невисокосного и невисокосного
+    *** `{+0, +31, +28, +31, +30, ..., +30}`
+    *** `{+0, +31, +29, +31, +30, ..., +30}`
+  ** c марта по февраль
+    *** `{+0, +31, +30, ..., +31}`
+
+== StringView
+
+* Это яркий пример класса с семантикой значения
+* Никаких собственных массивов! Это просто полуинтервал над внешним массивом символов.
+* Дефолтные конструктор копирования и оператор присваивания
+* Почти все функции не меняют объект - нужно объявить их как const
+* Внимательность к диапазонам индексов
+* Можно выражать одни функции через другие
+* И извините, но детская ошибка - sizeof вместо strlen.
+
+=== Конструкторы и присваивания
+
+[source,cpp]
+----
+class StringView {
+    const char* s_ = nullptr;
+    size_t n_ = 0;
+public:
+    // конструктор без параметров - пустая подстрока
+    StringView() = default;
+
+    // конструкторы с 1 аргументом участвуют в преобразовании типов
+    StringView(std::string s);  // смотрите, здесь ошибка!
+    StringView(const char* s);
+
+    StringView(const char* s, size_t n);
+
+    // конструктор копирования и оператор присваивания - по умолчанию
+};
+----
+
+Присваиваем:
+[source,cpp]
+----
+StringView sv;
+sv = "hello";  // = static_cast<StringView>("hello")
+sv = std::string("hello");  // почему так делать не следует?
+sv = StringView("hello", 4);
+----
+Мы всё это получили нахаляву!
+
+=== Внимательность
+
+Рассмотрим `substr(size_t left, size_t right = npos)`
+
+* очевидное требование: left ≤ right
+* если size < right или right < left, это
+  ** нарушение контракта - неопределённое поведение - возвращаем мусор
+  ** диагностируемая ошибка - кидаем исключение
+  ** исправляемая ошибка - упорядочиваем индексы, или возвращаем пустую строку
+* пример исправляемой не-ошибки: size < right
+  ** в частности, right = npos
+
+ifdef::backend-revealjs[=== !]
+
+* `haystack.find(needle)`
+  ** haystack.size() ≥ needle.size()
+  ** случаи, когда одна или обе строки пустые?
+* `removePrefix(size_t delta)`
+  ** delta ≤ size
+
+ifdef::backend-revealjs[=== !]
+
+* `findOneOf(StringView charset)`
+  ** случай, когда charset пустой?
+  ** поиск можно выразить через `charset.find(s_[i])`
