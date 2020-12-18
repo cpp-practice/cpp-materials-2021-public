@@ -1,0 +1,206 @@
+= Проблема: не компилируется logging_wrapper
+
+== Исходное решение
+
+Возьмём вот такой упрощённый код
+
+[source,cpp]
+---
+template<class F>
+decltype(auto) wrapper(F fun) {
+    auto lambda = [=](auto arg) -> decltype(auto) {
+        if constexpr (!std::is_void_v<decltype(fun(arg))) {
+            .....
+            decltype(auto) result = fun(arg);
+            .....
+            return result;  // проблема будет вот здесь
+        }
+    }
+    return lambda;
+}
+---
+
+== Наиграем ошибку
+
+Вызовем обёртку для разных функций
+
+[source,cpp]
+---
+float a(int);
+float& b(int);
+float&& c(int);
+
+wrapper(a)(1);
+wrapper(b)(1);
+wrapper(c)(1); // rvalue reference to type 'float' cannot bind to lvalue of type 'float' 
+---
+
+== Что же пошло не так?
+
+Мы же все типы постарались вывести автоматически?
+
+Давайте попробуем руками подставить все типы и переменные в нашу лямбду
+
+[source,cpp]
+---
+auto lambda(auto arg) -> decltype(auto) {
+    .....
+    decltype(auto) result = c(arg);
+    .....
+    return result;
+}
+---
+
+=== подставляем!
+
+Тип аргумента arg - это int.
+
+Тип переменной result - это тип `c(1)`, то есть, `float&&`.
+
+Тип результата позаимствован из result, - то есть, тоже `float&&`.
+
+[source,cpp]
+---
+auto lambda(int arg) -> float&& {
+    .....
+    float&& result = c(arg);
+    .....
+    return result;
+}
+---
+
+Вжух! не компилируется.
+
+=== но почему?
+
+Потому что, хоть result - это rvalue reference,
+но для всех выражений ниже - она превращается в обычное lvalue.
+
+По точно той же причине мы можем принимать аргументы по rvalue reference,
+- работать с ними, как с локальными переменными (каковыми они и являются)
+- а чтобы отдать их дальше - надо сделать std::move, то есть, сделать `static_cast<V&&>`
+
+== Попробуем исправить:
+
+Сделаем forward
+
+[source,cpp]
+---
+#define PERFECT(x) std::forward<decltype(x)>(x)  // пригодится
+
+template<class F>
+decltype(auto) wrapper(F fun) {
+    auto lambda = [=](auto arg) -> decltype(auto) {
+        if constexpr (!std::is_void_v<decltype(fun(arg))) {
+            .....
+            decltype(auto) result = fun(arg);
+            .....
+            return PERFECT(result);
+        }
+    }
+    return lambda;
+}
+---
+
+Хорошо?
+
+=== Плохо!
+
+А давайте теперь подсунем функцию, возвращающую rvalue.
+
+`wrapper(a)(1)`
+
+[source,cpp]
+---
+auto lambda(int arg) -> float&& {
+    float result = a(arg);
+    return std::forward<float>(result);
+}
+---
+
+Откуда взялось `-> float&`? Из типа возвращаемого значения. forward транслирует rvalue в rvalue reference.
+
+И у нас из функции вылетела ссылка на локальную переменную.
+
+== Ну и что же делать?
+
+Осознать, что наша обёртка должна возвращать не абы что, автоматически выведенное,
+а ровно то же, что исходная функция.
+
+То есть, `decltype(fun(arg))`.
+
+Тем более, что внутри мы ветвимся по этому типу - void или нет.
+
+[source,cpp]
+---
+template<class F>
+decltype(auto) wrapper(F fun) {
+    auto lambda = [=](auto arg) -> decltype(fun(arg)) {
+        if constexpr (!std::is_void_v<decltype(fun(arg))) {
+            decltype(auto) result = fun(arg);
+            return PERFECT(result);
+        }
+    }
+    return lambda;
+}
+---
+
+=== Точно хорошо?
+
+- float
+  - PERFECT превращает во float&& - возвращаем float
+  - формально, тут делается move constructor
+  - выполняется оптимизация возвращаемого значения (NRVO), так что всё ок
+- float&
+  - PERFECT оставляет как float& - возвращаем float& - вообще всё прекрасно
+- const float&
+  - то же самое
+- float&&
+  - то же самое
+
+=== А если...
+
+Заменим `decltype(auto) result` на универсальную ссылку `auto&& result`
+
+Для rvalue - да, тип result будет float&&, но выполнится продление жизни временного объекта.
+
+Так что пока что всё хорошо.
+
+== А мы ничено не забыли?
+
+А мы забыли, что аргументы надо тоже идеально передавать.
+
+Тем более, что функция на входе может быть полиморфной:
+
+[source,cpp]
+---
+struct foo {
+    void operator()(int&&) const;
+    float& operator()(int&) const;
+    char&& operator()(const int&) const;
+};
+---
+
+=== Придётся допилить тонким рашпилем наше решение.
+
+(Тут-то и пригодится нам макрос)
+
+[source,cpp]
+---
+template<class F>
+decltype(auto) wrapper(F fun) {
+    auto lambda = [=](auto&& arg) -> decltype(fun(PERFECT(arg))) {
+        if constexpr (!std::is_void_v<decltype(fun(PERFECT(arg)))) {
+            .....
+            decltype(auto) result = fun(PERFECT(arg));
+            .....
+            return PERFECT(result);
+        } else {
+            .....
+            fun(PERFECT(arg));  // допишем уж и void-ветку
+            .....
+        }
+    }
+    return lambda;
+}
+---
