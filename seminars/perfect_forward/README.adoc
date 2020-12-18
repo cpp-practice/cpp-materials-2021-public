@@ -187,6 +187,8 @@ struct foo {
 
 [source,cpp]
 ----
+#define PERFECT(x) std::forward<decltype(x)>(x)
+
 template<class F>
 decltype(auto) wrapper(F fun) {
     auto lambda = [=](auto&& arg) -> decltype(fun(PERFECT(arg))) {
