@@ -24,7 +24,9 @@ auto func =
 ```c++
 int main() {
    std::tuple<char, int, std::string> t{'a', 1, "abc"};
-   auto func =  [](const auto& arg) { std::cout << arg << " "; };
+   auto func =  [](const auto& arg) {
+       std::cout << arg << " ";
+   };
 
    func(std::get<0>(t));
    func(std::get<1>(t));
@@ -46,7 +48,9 @@ void for_each(const Tuple& tuple, Func&& func) {
 
 int main() {
    std::tuple<char, int, std::string> t{'a', 1, "abc"};
-   auto func =  [](const auto& arg) { std::cout << arg << " "; };
+   auto func =  [](const auto& arg) {
+       std::cout << arg << " ";
+   };
    for_each(t, func);
 }
 ```
@@ -68,7 +72,9 @@ void for_each(const Tuple& tuple, const Func& func) {
 
 int main() {
    std::tuple<char, int, std::string> t{'a', 1, "abc"};
-   auto func = [](const auto& arg) { std::cout << arg << " "; };
+   auto func = [](const auto& arg) {
+       std::cout << arg << " ";
+   };
    for_each(t, func);
 }
 ```
@@ -121,7 +127,8 @@ template <size_t... Is>
 struct IndexSequence {};
 
 template <size_t... Is, class T, class F>
-void for_each_impl(const T& t, const F& f, IndexSequence<Is...>) {
+void for_each_impl(const T& t, const F& f,
+                   IndexSequence<Is...>) {
     (f(std::get<Is>(t)), ...);
 }
 
@@ -165,7 +172,10 @@ static_assert(std::is_same_v<MakeIndexSequence<3>::type, IndexSequence<0, 1, 2>>
 ```c++
 template <size_t N>
 struct MakeIndexSequence {
-      using type = typename append_helper<typename MakeIndexSequence<N - 1>::type, N-1>::type;
+      using type = typename append_helper<
+                       typename MakeIndexSequence<N - 1>::type,
+                       N - 1
+                   >::type;
 };
 
 template <>
@@ -177,7 +187,10 @@ struct MakeIndexSequence<0> {
 Метафункция `append_helper` принимает `IndexSequence` и индекс, и добавляет этот индекс в конец `IndexSequence`:
 
 ```c++
-using ActualType = append_helper<IndexSequence<0>, 1>::type;
+using ActualType = append_helper<
+                       IndexSequence<0>,
+                       1
+                   >::type;
 using ExpectedType = IndexSequence<0, 1>;
 static_assert(std::is_same_v<ActualType, ExpectedType>);
 ```
@@ -198,7 +211,10 @@ struct append_helper<IndexSequence<Previous...>, LastIdx> {
 
 template <size_t N>
 struct MakeIndexSequence {
-      using type = typename append_helper<typename MakeIndexSequence<N - 1>::type, N-1>::type;
+      using type = typename append_helper<
+                       typename MakeIndexSequence<N - 1>::type,
+                       N - 1
+                   >::type;
 };
 
 template <>
@@ -213,7 +229,8 @@ struct MakeIndexSequence<0> {
 
 ```c++
 template <size_t... Is, class T, class F>
-void for_each_impl(const T& t, const F& f, IndexSequence<Is...>) {
+void for_each_impl(const T& t, const F& f,
+                   IndexSequence<Is...>) {
     (f(std::get<Is>(t)), ...);
 }
 
@@ -250,7 +267,9 @@ void for_each(const T& t, const F& f) {
 
 ```c++
 struct T {};
-T operator,(const T&, const T&) { std::cout << 1; return T(); }
+T operator,(const T&, const T&) {
+    std::cout << 1; return T();
+}
 
 int main() {
     std::tuple<T, T, T> t;
