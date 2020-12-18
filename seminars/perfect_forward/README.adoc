@@ -118,7 +118,7 @@ auto lambda(int arg) -> float&& {
 }
 ----
 
-Откуда взялось `-> float&`? Из типа возвращаемого значения. forward транслирует rvalue в rvalue reference.
+Откуда взялось `-> float&&`? Из типа возвращаемого значения. forward транслирует rvalue в rvalue reference.
 
 И у нас из функции вылетела ссылка на локальную переменную.
 
