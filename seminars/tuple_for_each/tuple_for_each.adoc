@@ -15,7 +15,7 @@
 
 ```c++
 std::tuple<char, int, std::string> t{'a', 1, "abc"};
-auto func = 
+auto func =
     [](const auto& arg) { std::cout << arg << " "; };
 ```
 
@@ -67,7 +67,7 @@ void for_each_impl(const Tuple& tuple, const Func& func) {
 
 template <class Tuple, class Func>
 void for_each(const Tuple& tuple, const Func& func) {
-    for_each_impl<0,1,2>(tuple, func); 
+    for_each_impl<0,1,2>(tuple, func);
 }
 
 int main() {
@@ -91,11 +91,11 @@ void for_each_impl(const Tuple& tuple, const Func& func) {
 
 template <class Tuple, class Func>
 void for_each(const Tuple& tuple, const Func& func) {
-    for_each_impl<0,1,2>(tuple, func); 
+    for_each_impl<0,1,2>(tuple, func);
 }
 ```
 
-Сейчас приходится вручную задавать индексы, которые попадают в пакет параметров `Is`. 
+Сейчас приходится вручную задавать индексы, которые попадают в пакет параметров `Is`.
 
 Поэтому это решение только для 3-кортежей. Если научимся формировать `Is` в зависимости от размера кортежа, то получим общее решение.
 
@@ -144,7 +144,7 @@ void for_each(const T& t, const F& f) {
 
 === Строим IndexSequence для кортежа
 
-Используя helper-метафункцию https://en.cppreference.com/w/cpp/utility/tuple/tuple_size[tuple_size] мы можем 
+Используя helper-метафункцию https://en.cppreference.com/w/cpp/utility/tuple/tuple_size[tuple_size] мы можем
 получить размер кортежа по его типу в compile time:
 
 ```c++
@@ -236,7 +236,7 @@ void for_each_impl(const T& t, const F& f,
 
 template <class T, class F>
 void for_each(const T& t, const F& f) {
-    using index_sequence = 
+    using index_sequence =
         typename MakeIndexSequence<std::tuple_size_v<T>>::type;
     for_each_impl(t, f, index_sequence{});
 }
@@ -244,7 +244,7 @@ void for_each(const T& t, const F& f) {
 
 === Замечание I
 
-Самописные `MakeIndexSequence` и `IndexSequence` можно заменить аналогами 
+Самописные `MakeIndexSequence` и `IndexSequence` можно заменить аналогами
 из стандартной библиотеки: `std::index_sequence` и `std::make_index_sequence`
 
 [.small-code]
@@ -298,5 +298,40 @@ void for_each_impl(const T& t, const F& f, std::index_sequence<Is...>) {
     ((f(std::get<Is>(t)), (void)0), ...);
 }
 ```
+
+=== Замечание III
+Что делать, если стандарт языка не поддерживает fold-expressions (since `c\++11`, until `c++17`)?
+
+---
+
+[.small-code]
+```c++
+template <size_t... Is, class T, class F>
+void for_each_impl(const T& t, const F& f, IndexSequence<Is...>) {
+    std::initializer_list<int> lst = {(f(std::get<Is>(t)), 0)...};
+    (void)lst; // suppress warning
+}
+
+template <class T, class F>
+void for_each(const T& t, const F& f) {
+    using index_sequence = typename MakeIndexSequence<std::tuple_size<T>::value>::type;
+    for_each_impl(t, f, index_sequence{});
+}
+```
+
+Создаем https://en.cppreference.com/w/cpp/utility/initializer_list[std::initializer_list], используя паттерн `( (void)f(std::get<Is>(t)), 0 )`
+
+`std::index_sequence` появился только в с++14, поэтому используем свою реализацию.
+
+=== Замечание III
+
+Почему именно такой паттерн?
+
+---
+
+* initializer_list хранит объекты одного типа, поэтому выражение в паттерне должно иметь всегда один и тот же тип.
+Это достигается за счет использования оператора "запятая" c нулем в качестве второго операнда.
+
+* приведение результата функции к `void` нужно, чтобы избежать использования перегрузки оператора "запятая"
 
 
