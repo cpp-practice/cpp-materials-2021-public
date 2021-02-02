@@ -99,14 +99,24 @@ class B{
 my_vector v{1, 2, 3};
 v << std::cout; // operator<<(v, std::cout);
 ```
-Чтобы этого избежать `operator<<` определяют вне класса как внешнюю функцию с сигнатурой:
+также можно определить его внутри класса как `friend` функцию:
 ```C++
-std::ostream& operator<<(std::ostream& os, const T& my_type);
+struct T {
+    friend std::ostream& operator<<(std::ostream& os, const T& t) {
+        return os << t.i;
+    }
+    int i = 3;
+};
 ```
 # 8. Скомпилируется ли функция, возвращающая non-void, если return-statement отсутствует в ее теле.
-
-да
-
+```C++
+int f () {}
+int main() {
+   f();
+}
+```
+Зависит от флагов компиляции:
+без флагов компилятор выдаст warning: "`no return statement in function returning non-void`", поэтому, если поставить флаг компиляции `-Werror` - будет ошибка.
 # 9. Для чего нужна проверка if (this == &other) в операторе присваивания? (*) Что может пойти не так, если ею пренебречь?
 
 Посмотрим на следующий код:
