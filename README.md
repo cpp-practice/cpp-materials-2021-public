@@ -84,10 +84,22 @@ _Примечание: бонусные коэффициенты и задачи
 
 ## Оценка за курс
 
+#### CSC
+
+Оценка за активности:
+
+`activities = AVG(домашние, контрольные, дорешки)`
+
+Итоговая оценка:
+
+`with_exam ? MAX(activities, AVG(activities, exam)) : activities`
+
+#### ITMO/HSE
+
 Если оценка за экзамен `< 2.5`, то оценка `2`.
 
 Иначе, `AVG(AVG(дорешки, контрольные, домашние), exam)`.
 
 ## Полезные ссылки
 
-- [Общая ведомость](https://docs.google.com/spreadsheets/d/1hUsPKiv9EAbH9n1wb228kd8Neb_2UNFI5Teu8Yk2HEI/edit#gid=238053417) (В случае отсутствия доступа, запросите его, указав Фамилию, Имя и ник на github.com)
+- [Общая ведомость](https://docs.google.com/spreadsheets/d/1hUsPKiv9EAbH9n1wb228kd8Neb_2UNFI5Teu8Yk2HEI/edit#gid=238053417) (В случае отсутствия доступа, запросите его, указав Фамилию, Имя и ник на github)
